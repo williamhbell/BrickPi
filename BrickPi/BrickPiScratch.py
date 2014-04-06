@@ -11,6 +11,10 @@ class BrickPiScratch(GenericDevice):
     # Call the base class constructor
     super(BrickPiScratch, self).__init__(deviceName_,scratchIO_,connections_)
 
+    # BrickPi port ids
+    self.__portIdsSensors = [ PORT_1, PORT_2, PORT_3, PORT_4, PORT_5 ]
+    self.__portIdsMotors = [ PORT_A, PORT_B, PORT_C, PORT_D ]
+
     # Read the list of attached sensors
     self.__haveSensors = False
     self.__parseConfigFile() 
@@ -54,12 +58,13 @@ class BrickPiScratch(GenericDevice):
           continue
 
         # Use the variables in BrickPi
+        channelOffet = -999
         portIds = []
-        channelOffet = 0
         if portName[0] == "S":
-          portIds += [ PORT_1, PORT_2, PORT_3, PORT_4]           
+          portIds = self.__portIdsSensors
+          channelOffset = 0          
         elif portName[0] == "M":
-          portIds += [ PORT_A, PORT_B, PORT_C, PORT_D]
+          portIds = self.__portIdsMotors
           channelOffset = 10
         else:
           print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
@@ -117,15 +122,19 @@ class BrickPiScratch(GenericDevice):
     elif intValue > 255:
       intValue = 255
 
+    # This should be safe, since the channelNumber is beforehand
+    portId = self.__portIdsMotors[channelNumber-10]
+
     # Set the motor speed value
-    BrickPi.MotorSpeed[PORT_A] = intValue
+    BrickPi.MotorSpeed[portId] = intValue
 
     # Ask BrickPi to update the sensor and motor values
     if BrickPiUpdateValues() != 0:
-      print("WARNING: X failed")
+      print("WARNING: %s is unable to set motor values" % self.deviceName)
       return None
 
     # Set the scratch sensor value for this motor
+    self.updateSensor(channelNumber,intValue)
 
   #-----------------------------
 
@@ -134,15 +143,19 @@ class BrickPiScratch(GenericDevice):
 
     # Ask BrickPi to update the sensor and motor values
     if BrickPiUpdateValues() != 0:
-      print("WARNING: X failed")
+      print("WARNING: %s is unable to retrieve sensor values" % self.deviceName)
       return None
 
-    # Value from sensor
-    BrickPi.Sensor[PORT_1]
-
-    BrickPi.Encoder[PORT_A] %720 ) /2   # print the encoder degrees 
-    # Note: One encoder value counts for 0.5 degrees. So 360 degrees = 720 enc. Hence, to get degress = (enc%720)/2
+    if channelNumber < 10:
+      # This should be safe, since the channelNumber is beforehand
+      portId = self.__portIdsSensors[channelNumber]
+      value = BrickPi.Sensor[portId]
+    else:
+      # This should be safe, since the channelNumber is beforehand
+      portId = self.__portIdsMotors[channelNumber-20]
+      value = BrickPi.Encoder[portId]/2   # print the encoder degrees 
    
-    # Update scratch with the value
+    # Send the value back to Scratch
+    self.updateSensor(channelNumber, value)
 
 #=====================================
