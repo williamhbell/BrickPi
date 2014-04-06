@@ -12,7 +12,7 @@ class BrickPiScratch(GenericDevice):
     super(BrickPiScratch, self).__init__(deviceName_,scratchIO_,connections_)
 
     # BrickPi port ids
-    self.__portIdsSensors = [ PORT_1, PORT_2, PORT_3, PORT_4, PORT_5 ]
+    self.__portIdsSensors = [ PORT_1, PORT_2, PORT_3, PORT_4 ]
     self.__portIdsMotors = [ PORT_A, PORT_B, PORT_C, PORT_D ]
 
     # Read the list of attached sensors
@@ -26,7 +26,7 @@ class BrickPiScratch(GenericDevice):
       assert 0 # Need to fix this cleanly
 
     # Setup the sensors, if requested
-    if self.haveSensors:
+    if self.__haveSensors:
       ret_val = BrickPiSetupSensors()
       if ret_val != 0:
         print "ERROR: coult not send sensor types to the BrickPi."
@@ -45,7 +45,7 @@ class BrickPiScratch(GenericDevice):
     # to which ports.  By default, all motors are enabled and no
     # sensors are enabled.
     if self.scratchIO.config.has_section("BrickPi"):
-      for portName, sensorName in self.config.items("BrickPi"):
+      for portName, sensorName in self.scratchIO.config.items("BrickPi"):
 
         if len(portName) != 2:
           print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
@@ -88,14 +88,14 @@ class BrickPiScratch(GenericDevice):
           print("WARNING: \"%s\" is not a valid sensor name. Valid sensor names are %s." % sensorName, allowedSensors)
           continue
 
-        sensorValue = exec("TYPE_SENSOR_%s" % sensorName)
+        exec "sensorValue = TYPE_SENSOR_%s" % sensorName
 
         # Add this sensor
         BrickPi.SensorType[portId] = sensorValue
 
         # Make sure the values are flushed to the BrickPi
-        if not self.haveSensors:
-          self.haveSensors = True
+        if not self.__haveSensors:
+          self.__haveSensors = True
 
         # Add this channel as an available input channel
         channelNumber = portNumber+channelOffset
