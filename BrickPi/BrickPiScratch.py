@@ -1,3 +1,4 @@
+import time
 from BrickPi import *
 from RpiScratchIO.Devices import GenericDevice
 
@@ -10,6 +11,19 @@ class BrickPiScratch(GenericDevice):
 
     # Call the base class constructor
     super(BrickPiScratch, self).__init__(deviceName_,scratchIO_,connections_)
+
+    # Add the channels to Scratch
+    for i in xrange(4):
+      self.inputChannels += [ i ]       # Sensors
+      self.outputChannels += [ i+10 ]   # Motors 
+      self.inputChannels += [ i+20 ]    # Encoders
+
+    # Active sensors, motors and motor encoders
+    self.activeChannels = {}
+    for i in self.inputChannels:
+      self.activeChannels[i] = False
+    for i in self.outputChannels:
+      self.activeChannels[i] = False
 
     # BrickPi port ids
     self.__portIdsSensors = [ PORT_1, PORT_2, PORT_3, PORT_4 ]
@@ -41,6 +55,8 @@ class BrickPiScratch(GenericDevice):
     allowedSensors += ["TOUCH","ULTRASONIC_CONT","ULTRASONIC_SS","RCX_LIGHT","COLOR_FULL"]
     allowedSensors += ["COLOR_RED","COLOR_GREEN","COLOR_BLUE","COLOR_NONE","I2C","I2C_9V"]
 
+    print "====== BrickPi ========================"
+    print "Port (Ch#) ---------- Sensor name" 
     # Read the configuration file, to find which sensors are connected
     # to which ports.  By default, all motors are enabled and no
     # sensors are enabled.
@@ -51,63 +67,89 @@ class BrickPiScratch(GenericDevice):
           print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
           continue
 
-        try:
-          portNumber = int(portName[1])
-        except ValueError:
-          print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
-          continue
+        # Three bit number : sensor, motor, motor encoder
+        connectionType = 0
 
         # Use the variables in BrickPi
         channelOffet = -999
         portIds = []
         if portName[0] == "S":
+          try:
+            portNumber = int(portName[1])
+          except ValueError:
+            print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
+            continue
+
           portIds = self.__portIdsSensors
-          channelOffset = 0          
+          connectionType += 1          
         elif portName[0] == "M":
+          portNumber = ord(portName[1])-ord('A')+1 # To match sensors
           portIds = self.__portIdsMotors
-          channelOffset = 10
+          connectionType += 2
         else:
           print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
           continue 
         
-        if portNumber > len(portIds):
+        if portNumber < 0 or portNumber > len(portIds):
           print("WARNING: \"%s\" is not a valid port name.  Valid ports are S1-S5 or MA-MD." % portName)
           continue
 
         # Get the port id for this port name
-        portId = portIds[portNumber]
+        portId = portIds[portNumber-1]
  
-        # Check if the sensor is a valid sensor name.
-        foundName = False
-        for sensorName in allowedSensors:
-          if sensorName.lower() == sensorName.lower():
-            foundName = True
-            break
+        # If this is a sensor, check if the sensor is a valid sensor name.
+        if connectionType & 1 == 1:
+          foundName = False
+          for allowedSensor in allowedSensors:
+            if allowedSensor.lower() == sensorName.lower():
+              foundName = True
+              break
 
-        if not foundName:
-          print("WARNING: \"%s\" is not a valid sensor name. Valid sensor names are %s." % sensorName, allowedSensors)
-          continue
+          if not foundName:
+            print("WARNING: \"%s\" is not a valid sensor name. Valid sensor names are %s." % sensorName, allowedSensors)
+            continue
 
-        exec "sensorValue = TYPE_SENSOR_%s" % sensorName
+          exec "sensorValue = TYPE_SENSOR_%s" % sensorName
 
-        # Add this sensor
-        BrickPi.SensorType[portId] = sensorValue
+          # Add this sensor
+          BrickPi.SensorType[portId] = sensorValue
 
-        # Make sure the values are flushed to the BrickPi
-        if not self.__haveSensors:
-          self.__haveSensors = True
+          # Activate this channel
+          self.__activateAndPrint(portName,portNumber-1,sensorName)          
+          
+        
+        # If this a motor, then enable the motor and check if the encoder should be enabled 
+        elif connectionType & 2 == 2:
+          BrickPi.MotorEnable[portId] = 1
+          self.__activateAndPrint(portName,portNumber-1+10,"ON")
 
-        # Add this channel as an available input channel
-        channelNumber = portNumber+channelOffset
-        if channelOffset < 10:
-          self.inputChannels += [ channelNumber ]
         else:
-          self.outputChannels += [ channelNumber ]
-          self.inputChannels += [ channelNumber+10 ] # Motor encoder
+          print("WARNING: unknown connection type!")
+          continue
+ 
+    print "======================================="
+
+  #-----------------------------
+
+  def __activateAndPrint(self,portName,channelNumber,sensorName):
+    self.activeChannels[channelNumber] = True
+    # If it is a motor, enable the encoder channel too.
+    if channelNumber >= 10:
+      self.activeChannels[channelNumber+10] = True
+    print("%4s (%3d) ---------- %s " % (portName,channelNumber,sensorName))
+
+    # Make sure the values are flushed to the BrickPi
+    if not self.__haveSensors:
+      self.__haveSensors = True
 
   #-----------------------------
 
   def write(self,channelNumber,value):
+
+    # Check if the channel is active or not
+    if not self.activeChannels[channelNumber]:
+      print("WARNING: channel %d of %s is disabled" % (channelNumber,self.deviceName))
+      return None
 
     # Convert to integer and catch the type error
     try:
@@ -125,6 +167,8 @@ class BrickPiScratch(GenericDevice):
     # This should be safe, since the channelNumber is beforehand
     portId = self.__portIdsMotors[channelNumber-10]
 
+    print "%d %d" % (portId,intValue)
+
     # Set the motor speed value
     BrickPi.MotorSpeed[portId] = intValue
 
@@ -139,7 +183,11 @@ class BrickPiScratch(GenericDevice):
   #-----------------------------
 
   def read(self,channelNumber):
-    # Read the sensor or motor encoder.
+
+    # Check if the channel is active or not
+    if not self.activeChannels[channelNumber]:
+      print("WARNING: channel %d of %s is disabled" % (channelNumber,self.deviceName))
+      return None
 
     # Ask BrickPi to update the sensor and motor values
     if BrickPiUpdateValues() != 0:
