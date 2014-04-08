@@ -1,4 +1,4 @@
-import time
+import sys,threading,time
 from BrickPi import *
 from RpiScratchIO.Devices import GenericDevice
 
@@ -45,6 +45,10 @@ class BrickPiScratch(GenericDevice):
       if ret_val != 0:
         print "ERROR: coult not send sensor types to the BrickPi."
         assert 0 # Need to fix this cleanly
+
+    # Start communication loop between Raspberry Pi and BrickPi
+    self.__readoutEvent = 0
+    self.__startLink()
 
   #-----------------------------
 
@@ -144,6 +148,32 @@ class BrickPiScratch(GenericDevice):
 
   #-----------------------------
 
+  def __startLink(self):
+    print " >> Starting communication with BrickPi"
+    self.shutdown_flag = False
+    self.server_thread = threading.Thread(target=self.ioThread)
+    self.server_thread.start()
+
+  #-----------------------------
+
+  def ioThread(self):
+    while not self.shutdown_flag:
+      if BrickPiUpdateValues() == 0:
+        self.__readoutEvent = self.__readoutEvent + 1
+        if self.__readoutEvent >= sys.maxint:
+          self.__readoutEvent = 0
+      time.sleep(.1)
+
+
+  #-----------------------------
+
+  def cleanup(self):
+    self.shutdown_flag = True
+    time.sleep(.2)
+    # close the serial link here?
+
+  #-----------------------------
+
   def write(self,channelNumber,value):
 
     # Check if the channel is active or not
@@ -172,8 +202,17 @@ class BrickPiScratch(GenericDevice):
     # Set the motor speed value
     BrickPi.MotorSpeed[portId] = intValue
 
-    # Ask BrickPi to update the sensor and motor values
-    if BrickPiUpdateValues() != 0:
+    # Get the last event number, to check for a new value
+    lastReadout = self.__readoutEvent
+
+    # Wait for a new value
+    counter = 0
+    while lastReadout == self.__readoutEvent and counter < 20:
+      time.sleep(0.05)
+      counter = counter + 1
+
+    # Check if the update was successful or not
+    if counter == 20:
       print("WARNING: %s is unable to set motor values" % self.deviceName)
       return None
 
@@ -189,8 +228,16 @@ class BrickPiScratch(GenericDevice):
       print("WARNING: channel %d of %s is disabled" % (channelNumber,self.deviceName))
       return None
 
-    # Ask BrickPi to update the sensor and motor values
-    if BrickPiUpdateValues() != 0:
+    # Get the last event number, to check for a new value
+    lastReadout = self.__readoutEvent 
+
+    # Wait for a new value
+    counter = 0
+    while lastReadout == self.__readoutEvent and counter < 20:
+      time.sleep(0.05)
+      counter = counter + 1
+
+    if counter == 20:
       print("WARNING: %s is unable to retrieve sensor values" % self.deviceName)
       return None
 
