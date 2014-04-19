@@ -1,3 +1,9 @@
+# W. H. Bell
+#
+# A Scratch interface, to be used with RpiScratchIO
+# The class inherits from RpiScratchIO, to provide
+# access to motors and sensors
+
 import sys,threading,time
 from BrickPi import *
 from RpiScratchIO.Devices import GenericDevice
@@ -7,10 +13,17 @@ from RpiScratchIO.Devices import GenericDevice
 # For the chip of the same name
 class BrickPiScratch(GenericDevice):
 
-  def __init__(self,deviceName_,scratchIO_,connections_):
+  def __init__(self,deviceName_,scratchIO_,connections_,readPeriod_=0,automaticChannels_="None"):
 
     # Call the base class constructor
     super(BrickPiScratch, self).__init__(deviceName_,scratchIO_,connections_)
+
+    # This is used to trigger readout from the ioThread function.
+    # (If the value is zero, it is disabled.)
+    self.readPeriod = int(readPeriod_)
+
+    # List of automatic sensors to be updated.
+    self.automaticUpdate = []
 
     # Add the channels to Scratch
     for i in xrange(4):
@@ -46,9 +59,42 @@ class BrickPiScratch(GenericDevice):
         print "ERROR: coult not send sensor types to the BrickPi."
         assert 0 # Need to fix this cleanly
 
+      # If requested, add some sensors or motor encoders for automatic
+      # update by the ioThread.
+      self.__addAutomaticChannels(automaticChannels_)
+
     # Start communication loop between Raspberry Pi and BrickPi
     self.__readoutEvent = 0
     self.__startLink()
+
+  #-----------------------------
+
+  def __addAutomaticChannels(channelStr):
+
+    # Convert the character string to a channel range or channel
+    # number
+    channelsToAdd = []
+    if channelStr == "A":
+      channelsToAdd += self.inputChannels:
+    elif channelStr == "M":
+      channelsToAdd += self.motorChannels:
+    elif channelStr == "S":
+      channelsToAdd += self.sensorChannels:
+    else:
+      try:
+        channelNumber = int(channelStr)
+        if channelNumber in self.inputChannels:
+          channelsToAdd += [ channelNumber ]
+        else:
+          print("WARNING: \"%d\" is not a valid channel number" % channelNumber)
+
+      except ValueError:
+        print("WARNING: \"%s\" is not a number." % channelStr)
+
+    # Enable channels that are active for automatic readout
+    for channelNumber in channelsToAdd:
+      if self.activeChannels[channelNumber]:
+        self.automaticUpdate += [ channelNumber ]
 
   #-----------------------------
 
@@ -135,6 +181,20 @@ class BrickPiScratch(GenericDevice):
 
   #-----------------------------
 
+  def __brickPiSensorValue(self,channelNumber):
+    if channelNumber < 10:
+      # This should be safe, since the channelNumber is beforehand
+      portId = self.__portIdsSensors[channelNumber]
+      value = BrickPi.Sensor[portId]
+    else:
+      # This should be safe, since the channelNumber is beforehand
+      portId = self.__portIdsMotors[channelNumber-20]
+      value = BrickPi.Encoder[portId]/2   # print the encoder degrees
+
+    return value
+
+  #-----------------------------
+
   def __activateAndPrint(self,portName,channelNumber,sensorName):
     self.activeChannels[channelNumber] = True
     # If it is a motor, enable the encoder channel too.
@@ -160,8 +220,31 @@ class BrickPiScratch(GenericDevice):
     while not self.shutdown_flag:
       if BrickPiUpdateValues() == 0:
         self.__readoutEvent = self.__readoutEvent + 1
+
+        # Check if the values should be given to scratch or not.
+        if self.readPeriod > 0:
+          if self.__readoutEvent % self.readPeriod == 0:
+
+            # Loop over all of the channels that should be sent
+            # straight back to Scratch.
+            for channelNumber in self.automaticUpdate:
+
+              # Get the BrickPi sensor value for this channel
+              value = self.__brickPiSensorValue(channelNumber)
+
+              # Send the value back to Scratch
+              self.updateSensor(channelNumber, value)
+
+            # Tell scratch that an updated value is available from any
+            # of the sensors that are enabled for continuous readout.
+            broadcast_msg = "%s:trig" % self.deviceName
+            self.scratchIO.scratchHandler.scratchConnection.broadcast(broadcast_msg)
+
+        # If the number is bigger than the maximum size of an integer,
+        # then go back to zero
         if self.__readoutEvent >= sys.maxint:
           self.__readoutEvent = 0
+
       time.sleep(.1)
 
 
@@ -241,15 +324,9 @@ class BrickPiScratch(GenericDevice):
       print("WARNING: %s is unable to retrieve sensor values" % self.deviceName)
       return None
 
-    if channelNumber < 10:
-      # This should be safe, since the channelNumber is beforehand
-      portId = self.__portIdsSensors[channelNumber]
-      value = BrickPi.Sensor[portId]
-    else:
-      # This should be safe, since the channelNumber is beforehand
-      portId = self.__portIdsMotors[channelNumber-20]
-      value = BrickPi.Encoder[portId]/2   # print the encoder degrees 
-   
+    # Get the sensor value that matches this channel number
+    value = self.__brickPiSensorValue(channelNumber)
+
     # Send the value back to Scratch
     self.updateSensor(channelNumber, value)
 

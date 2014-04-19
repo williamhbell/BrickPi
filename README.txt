@@ -1,6 +1,6 @@
-============
-RpiScratchIO
-============
+=======
+BrickPi
+=======
 
 RpiScratchIO is a package that provides additional IO functionality to 
 Scratch, running on a local Raspberry Pi or on a remote Raspberry Pi or 
