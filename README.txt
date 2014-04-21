@@ -2,72 +2,141 @@
 BrickPi
 =======
 
-RpiScratchIO is a package that provides additional IO functionality to 
-Scratch, running on a local Raspberry Pi or on a remote Raspberry Pi or 
-other computer.  The package uses the scratchpy client interface to connect 
-to a Scratch server process.  The package can be used by running the 
-RpiScratchIO script or via::
-
-    #!/usr/bin/env python
-
-    import time
-    import RpiScratchIO
-    from RpiScratchIO import ScratchIO
-    s = ScratchIO.ScratchIO("myConfig.cfg")
-    try:
-      while 1:
-        time.sleep(1000)
-
-    except KeyboardInterrupt:
-      s.cleanup()
+BrickPi is a package that provides access to the BrickPi Raspberry Pi extension board.  
+The BrickPi extension board is a microprocessor board that allows the Raspberry Pi to 
+communicate with LEGO Mindstorms motors and sensors.  The package provides Python and 
+Scratch access to the BrickPi.
 
 
-Configuration file
-==================
+Scratch interface
+=================
 
-The configuration file is read using ConfigParser.  The file has three 
-sections, e.g.::
+The Scratch interface is via a Device class and the RpiScratchIO package.
 
-    # Unique device name and class.  If the device name is a GPIO
-    # BCM id, then no class name is needed.
+
+RpiScratchIO configuration file
+-------------------------------
+
+The Scratch interface uses scratchpy via RpiScratchIO.  Sensors should be added by 
+declaring them in the configuration file::
+
     [DeviceTypes]
-    GPIO23 =
-    ADC = MCP3008()
-    Motor = HBRIDGE()
-    file = FileConnection()
+    LEGO = import BrickPi; from BrickPi.BrickPiScratch import BrickPiScratch; BrickPiScratch()
 
-    # The connection mapping for each device.  Simple GPIO devices do
-    # not need a mapping.  The unique device name must be defined in 
-    # the DeviceTypes section before the DeviceConnections section.
     [DeviceConnections]
-    ADC = SPI0
-    MOTOR = GPIO12,GPIO13,GPIO02
-    file = file.txt
+    LEGO = UART0
 
-    # Used to connect to the Scratch server.  Set the host name to
-    # localhost to use the local Scratch server or choose an IP of
-    # another Scratch server.
-    [ScratchConnection]
-    host = localhost
-    port = 42001
+    [BrickPi]
+    S1 = ULTRASONIC_CONT
+    MA =
+    MB =
 
-DeviceTypes
------------
+In this example, one ultrasonic sensor and two motors are attached to the BrickPi.  
+Motors can be added to the MC or MD ports by declaring them in the same manner.  Sensors 
+can be added by addting the sensor name after S2-S4.  The available sensor names are::
 
-* The name used before the equals sign must be unique.  It is the name
-  that Scratch will use to refer to the device.
+    TOUCH
+    ULTRASONIC_CONT
+    ULTRASONIC_SS
+    RCX_LIGHT
+    COLOR_FULL
+    COLOR_RED
+    COLOR_GREEN
+    COLOR_BLUE
+    COLOR_NONE
+    I2C
+    I2C_9V
 
-* The text to the right of the equals sign should correspond to a class
-  instantiation.  The string is interpreted as Python, where the default
-  arguments are passed to the class constructor.  This means that
-  Additional arguments can be included inside the constructor call and
-  import statements can be used to include other Python classes.
+When instantiated, the BrickPiScratch class starts a separate thread to update values 
+between the BrickPi and the Raspberry Pi at a rate of 10Hz.  Values can then be read 
+from the Raspberry Pi on demand or within the data acquisition loop.  To configure the 
+automatic readout to Scratch during the data acquisition loop, the readout period can be 
+stated in the configuration file::
 
-* In the case of a device name that is a GPIO BCM number (e.g. GPIO23),
-  no object needs to be assigned since a SimpleGpio object is assgined
-  by default.
+    LEGO = import BrickPi; from BrickPi.BrickPiScratch import BrickPiScratch; BrickPiScratch(5)
 
-DeviceConnections
+where this line should replace the constructor line in the previous example and the number 
+5 is the readout period.  This means that the sensor or motor encoder values will be 
+updated in Scratch once for every five readout loops.  Since the readout loop runs at 
+10Hz, this implies that the sensors in Scratch are updated at a rate of 2Hz.  For a 
+simple Scratch program running on the Raspberry Pi, 2Hz is the maximum that Scratch can 
+deal with.
+
+The sensors or motor encoders can be added to the automatic readout loop by using 
+the channel number (explained later) or S (for all sensors) or M (for all motor 
+encoders) or All (for both sensors and motor encoders).  The period and sensors can also 
+be added from Scratch, buy using the config command (explained later).  To prevent the 
+automatic update of sensors or motor encoders when Scratch starts, set the readout 
+period to 0::
+
+    LEGO = import BrickPi; from BrickPi.BrickPiScratch import BrickPiScratch; BrickPiScratch(0,"S")
+
+where the active sensor channels have all been added in this case too.
+
+Access from Scratch
+-------------------
+
+Start Scratch from the command line or the menu.  Then enable the remote sensor 
+connections by right clicking on the "sensor value" text that can be found under the 
+"Sensing" tool palette.  A dialog box should appear to say that the remote sensor 
+connections have been enabled.  At this point, Scratch becomes a server.  Do not run 
+more than one Scratch window on the same machine, otherwise only the first one will be 
+accessible from the Python API.  When Scratch has been started, type::
+
+    RpiScratchIO configFile.cfg
+
+where "configFile.cfg" should be replaced with the name of the configuration file that 
+was created in the previous step.  If the name of the configuration file is omitted, 
+then RpiScatchIO will try to use RpiScrathIO.cfg instead.
+
+When RpiScratchIO starts, it loads the BrickPiScratch Python class.  This updates 
+Scratch with several new sensors.  Using the example configuration files given above, 
+the variables are::
+
+    LEGO:0
+    LEGO:1
+    LEGO:2
+    LEGO:3
+    LEGO:10
+    LEGO:11
+    LEGO:12
+    LEGO:13
+    LEGO:20
+    LEGO:21
+    LEGO:22
+    LEGO:23
+
+where these correspond to the sensor ports S1-S4 (0-3), motor ports MA-MD (10-13) and 
+motor encoder ports (20-23).  The motor sensors (10-13) contain the value that was 
+written to the motors.  Values can be read into the sensor values on demand by sending a 
+Scratch broadcast message of the form::
+
+    LEGO:read:0
+
+where 0 is the channel number (S1 in this case).  The value will then appear in the 
+corresponding sensor approximately 0.2 of a second later.
+
+Values can be written to the motors by sending a Scratch broadcast request of the form::
+
+    LEGO:write:10,200 
+
+where 10 is the channel number (MA in this case) and 200 is the motor speed value.
+
+Scatch can be used to enable the automatic updating of enabled sensor values by broadcasting::
+
+    LEGO:config:update,s
+
+where the list of channels or wild card options (s for all sensors, m for all motor 
+encoders or a list of channels separated by spaces), should follow update.  The rate of 
+the update can be set from Scatch by broadcasting::
+
+    LEOG:config:period,5
+
+where 5 implies 2Hz and 10 implies 1Hz etc..  To disable the automatic readout, the 
+period should be set to 0.
+
+
+
 -----------------
 
 * The DeviceConnections section must be after the DeviceTypes section.
