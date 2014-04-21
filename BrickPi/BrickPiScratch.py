@@ -13,7 +13,7 @@ from RpiScratchIO.Devices import GenericDevice
 # For the chip of the same name
 class BrickPiScratch(GenericDevice):
 
-  def __init__(self,deviceName_,scratchIO_,connections_,readPeriod_=0,automaticChannels_="None"):
+  def __init__(self,deviceName_,scratchIO_,connections_,readPeriod_=0,automaticChannels_="none"):
 
     # Call the base class constructor
     super(BrickPiScratch, self).__init__(deviceName_,scratchIO_,connections_)
@@ -26,10 +26,14 @@ class BrickPiScratch(GenericDevice):
     self.automaticUpdate = []
 
     # Add the channels to Scratch
+    self.sensorChannels = []
+    self.encoderChannels = []
     for i in xrange(4):
-      self.inputChannels += [ i ]       # Sensors
+      self.sensorChannels += [ i ]      # Sensors
       self.outputChannels += [ i+10 ]   # Motors 
-      self.inputChannels += [ i+20 ]    # Encoders
+      self.encoderChannels += [ i+20 ]   # Encoders
+    self.inputChannels += self.sensorChannels
+    self.inputChannels += self.encoderChannels
 
     # Active sensors, motors and motor encoders
     self.activeChannels = {}
@@ -69,27 +73,33 @@ class BrickPiScratch(GenericDevice):
 
   #-----------------------------
 
-  def __addAutomaticChannels(channelStr):
+  def __addAutomaticChannels(self,channelStr):
+
+    # For case insenstive comparison
+    channelStrLower = channelStr.lower()
 
     # Convert the character string to a channel range or channel
     # number
     channelsToAdd = []
-    if channelStr == "A":
-      channelsToAdd += self.inputChannels:
-    elif channelStr == "M":
-      channelsToAdd += self.motorChannels:
-    elif channelStr == "S":
-      channelsToAdd += self.sensorChannels:
+    if channelStrLower.lower() == "none":
+      del self.automaticUpdate[:]
+      return None
+    elif channelStrLower.lower() == "all":
+      channelsToAdd += self.inputChannels
+    elif channelStrLower.lower() == "m":
+      channelsToAdd += self.encoderChannels
+    elif channelStrLower.lower() == "s":
+      channelsToAdd += self.sensorChannels
     else:
       try:
-        channelNumber = int(channelStr)
+        channelNumber = int(channelStrLower)
         if channelNumber in self.inputChannels:
           channelsToAdd += [ channelNumber ]
         else:
           print("WARNING: \"%d\" is not a valid channel number" % channelNumber)
 
       except ValueError:
-        print("WARNING: \"%s\" is not a number." % channelStr)
+        print("WARNING: \"%s\" is not a number." % channelStrLower)
 
     # Enable channels that are active for automatic readout
     for channelNumber in channelsToAdd:
@@ -232,6 +242,8 @@ class BrickPiScratch(GenericDevice):
               # Get the BrickPi sensor value for this channel
               value = self.__brickPiSensorValue(channelNumber)
 
+              #print("ioThread %d %d" % (channelNumber,value))
+
               # Send the value back to Scratch
               self.updateSensor(channelNumber, value)
 
@@ -254,6 +266,31 @@ class BrickPiScratch(GenericDevice):
     self.shutdown_flag = True
     time.sleep(.2)
     # close the serial link here?
+
+  #-----------------------------
+
+  def config(self,argList):
+    nargs = len(argList)
+    if nargs == 0:
+      print("WARNING: \"config\" expects at least one argument.  No arguments were given")
+      return None
+    if argList[0] == "update":
+      if nargs == 1:
+        print("WARNING:device %s expects \"all\", \"s\", \"m\", \"none\" or channel number after \"update\"" % self.deviceName)
+        return None
+      for arg in argList[1:]:
+         self.__addAutomaticChannels(arg)
+    elif argList[0] == "period":
+      if nargs == 1:
+        print("WARNING:device %s expects an integer number after \"period\"" % self.deviceName)
+        return None
+
+      # Convert to integer and catch the type error
+      try:
+        self.readPeriod = int(argList[1])
+      except ValueError:
+        print("WARNING: %s is not an integer." % argList[1])
+        return None
 
   #-----------------------------
 
@@ -280,7 +317,7 @@ class BrickPiScratch(GenericDevice):
     # This should be safe, since the channelNumber is beforehand
     portId = self.__portIdsMotors[channelNumber-10]
 
-    print "%d %d" % (portId,intValue)
+    print("Write %d %d" % (portId,intValue))
 
     # Set the motor speed value
     BrickPi.MotorSpeed[portId] = intValue
