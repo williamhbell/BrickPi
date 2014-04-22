@@ -53,15 +53,13 @@ class BrickPiScratch(GenericDevice):
     # Open serial port connection
     ret_val = BrickPiSetup()
     if ret_val != 0:
-      print "ERROR: could not open serial port link to the BrickPi.  Check the serial port configuration and hardware."
-      assert 0 # Need to fix this cleanly
+      raise Exception("ERROR: could not open serial port link to the BrickPi.  Check the serial port configuration and hardware.")
 
     # Setup the sensors, if requested
     if self.__haveSensors:
       ret_val = BrickPiSetupSensors()
       if ret_val != 0:
-        print "ERROR: coult not send sensor types to the BrickPi."
-        assert 0 # Need to fix this cleanly
+        raise Exception("ERROR: coult not send sensor types to the BrickPi.")
 
       # If requested, add some sensors or motor encoders for automatic
       # update by the ioThread.
@@ -115,8 +113,8 @@ class BrickPiScratch(GenericDevice):
     allowedSensors += ["TOUCH","ULTRASONIC_CONT","ULTRASONIC_SS","RCX_LIGHT","COLOR_FULL"]
     allowedSensors += ["COLOR_RED","COLOR_GREEN","COLOR_BLUE","COLOR_NONE","I2C","I2C_9V"]
 
-    print "====== BrickPi ========================"
-    print "Port (Ch#) ---------- Sensor name" 
+    print("====== BrickPi ========================")
+    print("Port (Ch#) ---------- Sensor name") 
     # Read the configuration file, to find which sensors are connected
     # to which ports.  By default, all motors are enabled and no
     # sensors are enabled.
@@ -187,7 +185,7 @@ class BrickPiScratch(GenericDevice):
           print("WARNING: unknown connection type!")
           continue
  
-    print "======================================="
+    print("=======================================")
 
   #-----------------------------
 
@@ -219,7 +217,7 @@ class BrickPiScratch(GenericDevice):
   #-----------------------------
 
   def __startLink(self):
-    print " >> Starting communication with BrickPi"
+    print(" >> Starting communication with BrickPi")
     self.shutdown_flag = False
     self.server_thread = threading.Thread(target=self.ioThread)
     self.server_thread.start()
@@ -317,7 +315,7 @@ class BrickPiScratch(GenericDevice):
     # This should be safe, since the channelNumber is beforehand
     portId = self.__portIdsMotors[channelNumber-10]
 
-    print("Write %d %d" % (portId,intValue))
+    #print("Write %d %d" % (portId,intValue))
 
     # Set the motor speed value
     BrickPi.MotorSpeed[portId] = intValue
