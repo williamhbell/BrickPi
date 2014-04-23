@@ -17,7 +17,7 @@ classifiers = ['Development Status :: 3 - Alpha',
 
 setup(
     name='BrickPi',
-    version='0.1.0',
+    version='0.1.2',
     author='W. H. Bell',
     author_email='whbqcd1@gmail.com',
     packages=['BrickPi'],
@@ -28,6 +28,6 @@ setup(
     keywords='Raspberry Pi BrickPi Scratch',
     classifiers=classifiers,
     install_requires=[
-        "RpiScratchIO >= 0.1.5",
+        "RpiScratchIO >= 0.1.6",
     ],
 )
