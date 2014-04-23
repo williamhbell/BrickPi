@@ -17,7 +17,7 @@ classifiers = ['Development Status :: 3 - Alpha',
 
 setup(
     name='BrickPi',
-    version='0.1.2',
+    version='0.1.3',
     author='W. H. Bell',
     author_email='whbqcd1@gmail.com',
     packages=['BrickPi'],
